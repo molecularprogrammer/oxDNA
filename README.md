@@ -14,6 +14,10 @@ The HTML documentation can also be generated locally by running `make html` in t
 
 Installation instructions can be found in the `docs/source/install.md` file or online [here](https://lorenzo-rovigatti.github.io/oxDNA/install.html).
 
+It is recommended to use native Ubuntu/Debian Linux for your host.
+- WSL2 will impose a significant performance drop, but it is still supported
+- Mac does not support CUDA, so it will be disabled
+
 ## Examples
 
 The `examples` folder contains many examples showing the main features of the code. Note that the `METADYNAMICS`, `OXPY` and `OXPY_REMD` examples require `oxpy`, oxDNA's python bindings that can be compiled by setting `-DPython=ON` during the [compilation stage](https://lorenzo-rovigatti.github.io/oxDNA/install.html#cmake-options).
