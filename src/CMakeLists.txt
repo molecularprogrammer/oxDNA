@@ -10,12 +10,28 @@ ELSE()
 	SET(exe_name oxDNA)
 ENDIF()
 
+set(legacy_SOURCES
+	Observables/SaltExtrapolation.cpp
+	Observables/Configurations/JordanOutput.cpp
+	Observables/Configurations/TclOutput.cpp
+	Observables/Configurations/PdbOutput.cpp
+	Observables/Configurations/ChimeraOutput.cpp
+	Interactions/DHSInteraction.cpp
+	Interactions/JordanInteraction.cpp
+	Interactions/PatchyInteractionDan.cpp
+	Particles/JordanParticle.cpp
+	Particles/PatchyParticleDan.cpp
+	Backends/MCMoves/RotateSite.cpp
+)
+
 SET(observables_SOURCES
 	Observables/BaseObservable.cpp
 	Observables/ObservableFactory.cpp
 	Observables/ObservableOutput.cpp
 	Observables/Step.cpp
 	Observables/PotentialEnergy.cpp
+	Observables/StackingPropensity.cpp
+	Observables/CrossStackingPropensity.cpp
 	Observables/KineticEnergy.cpp
 	Observables/TotalEnergy.cpp
 	Observables/BackendInfo.cpp	
@@ -35,7 +51,6 @@ SET(observables_SOURCES
 	Observables/ParticlePosition.cpp
 	Observables/CoaxVariables.cpp
 	Observables/Pitch.cpp
-	Observables/SaltExtrapolation.cpp
 	Observables/ExternalTorque.cpp
 	Observables/MeanVectorCosine.cpp
 	Observables/VectorAngle.cpp
@@ -54,14 +69,13 @@ SET(observables_SOURCES
 	Observables/ContactMap.cpp
 	Observables/AllVectors.cpp
 	Observables/ExternalForce.cpp
+	Observables/ParticleForceAndTorque.cpp
+	Observables/ParticleStress.cpp
+	Observables/Coordination.cpp
 	Observables/Configurations/Configuration.cpp
 	Observables/Configurations/BinaryConfiguration.cpp
-	Observables/Configurations/TclOutput.cpp
-	Observables/Configurations/PdbOutput.cpp
-	Observables/Configurations/ChimeraOutput.cpp
 	Observables/Configurations/TEPtclOutput.cpp
 	Observables/Configurations/TEPxyzOutput.cpp
-	Observables/Configurations/JordanOutput.cpp
 )
 
 SET(backends_SOURCES
@@ -107,24 +121,24 @@ SET(interactions_SOURCES
 	Interactions/LJInteraction.cpp
 	Interactions/DNAInteraction.cpp
 	Interactions/DNA2Interaction.cpp
-	Interactions/DNAInteraction_nomesh.cpp
+	Interactions/DNA2SDInteraction.cpp
+	Interactions/DNA3Interaction.cpp
 	Interactions/DNAInteraction_relax.cpp
 	Interactions/RNAInteraction.cpp
 	Interactions/RNAInteraction2.cpp
 	Interactions/RNAInteraction_relax.cpp
-	Interactions/JordanInteraction.cpp
 	Interactions/TEPInteraction.cpp
 	Interactions/HSInteraction.cpp
-	Interactions/DHSInteraction.cpp
 	Interactions/HardCylinderInteraction.cpp
 	Interactions/HardSpheroCylinderInteraction.cpp
 	Interactions/BoxInteraction.cpp
 	Interactions/PatchyInteraction.cpp
-	Interactions/PatchyInteractionDan.cpp
 	Interactions/KFInteraction.cpp
-	Interactions/CustomInteraction.cpp
 	Interactions/DRHInteraction.cpp
 	Interactions/DRHInteraction_relax.cpp
+	Interactions/ANMInteraction.cpp
+	Interactions/DNANMInteraction.cpp
+	Interactions/RNANMInteraction.cpp
 )
 
 SET(move_SOURCES
@@ -137,7 +151,6 @@ SET(move_SOURCES
 	Backends/MCMoves/VolumeMove.cpp
 	Backends/MCMoves/MoleculeVolumeMove.cpp
 	Backends/MCMoves/ShapeMove.cpp
-	Backends/MCMoves/RotateSite.cpp
 )
 
 SET(forces_SOURCES
@@ -162,12 +175,15 @@ SET(forces_SOURCES
 	Forces/GenericCentralForce.cpp
 	Forces/LJCone.cpp
 	Forces/YukawaSphere.cpp
+	Forces/Metadynamics/LTCoordination.cpp
 	Forces/Metadynamics/LTCOMTrap.cpp
 	Forces/Metadynamics/LTCOMAngleTrap.cpp
 	Forces/Metadynamics/LT2DCOMTrap.cpp
 	Forces/Metadynamics/LTAtanCOMTrap.cpp
 	Forces/Metadynamics/meta_utils.cpp
 	Forces/AttractionPlane.cpp
+	Forces/RepulsiveKeplerPoinsot.cpp
+	Forces/RepulsiveSphereMoving.cpp
 
 )
 
@@ -180,16 +196,14 @@ SET(box_SOURCES
 )
 
 SET(common_SOURCES
-	Particles/JordanParticle.cpp
 	Particles/TEPParticle.cpp
 	Particles/RNANucleotide.cpp
 	Particles/BaseParticle.cpp
 	Particles/DNANucleotide.cpp
 	Particles/PatchyParticle.cpp
-	Particles/PatchyParticleDan.cpp
 	Particles/SpheroCylinder.cpp
-	Particles/CustomParticle.cpp
 	Particles/Molecule.cpp
+	Particles/ANMParticle.cpp
 	Managers/SimManager.cpp
 	Utilities/OrderParameters.cpp
 	Utilities/Weights.cpp
@@ -225,6 +239,11 @@ SET(confGenerator_SOURCES
 	Managers/GeneratorManager.cpp
 )
 
+if(LEGACY_CODE)
+	add_compile_definitions(LEGACY_CODE)
+	SET(common_SOURCES ${common_SOURCES} ${legacy_SOURCES})
+ENDIF()
+
 IF(MPI)
 	FIND_PACKAGE(MPI REQUIRED)
 	INCLUDE_DIRECTORIES(${MPI_INCLUDE_PATH})
@@ -256,11 +275,13 @@ IF(CUDA)
 		CUDA/Backends/MD_CUDABackend.cu
 		CUDA/Interactions/CUDABaseInteraction.cu
 		CUDA/Interactions/CUDADNAInteraction.cu
+		CUDA/Interactions/CUDADNA3Interaction.cu
 		CUDA/Interactions/CUDALJInteraction.cu
 		CUDA/Interactions/CUDARNAInteraction.cu
 		CUDA/Interactions/CUDAPatchyInteraction.cu
 		CUDA/Interactions/CUDATEPInteraction.cu
 		CUDA/Interactions/CUDAInteractionFactory.cu
+		CUDA/Interactions/CUDADNANMInteraction.cu
 		CUDA/Lists/CUDAListFactory.cu
 		CUDA/Lists/CUDANoList.cu
 		CUDA/Lists/CUDASimpleVerletList.cu
@@ -272,12 +293,11 @@ IF(CUDA)
 		CUDA/Thermostats/CUDASRDThermostat.cu
 		CUDA/Thermostats/CUDALangevinThermostat.cu
 		CUDA/Thermostats/CUDABussiThermostat.cu
+		CUDA/Thermostats/CUDARefreshThermostat.cu
 		Utilities/Timings.cpp
 	)
 	
-	IF(CUDA_DOUBLE)
-		ADD_DEFINITIONS(-DCUDA_DOUBLE_PRECISION)
-	ELSE()
+	IF(NOT CUDA_DOUBLE)
 		LIST(APPEND common_SOURCES
 			CUDA/Backends/MD_CUDAMixedBackend.cu 
 			CUDA/Backends/FFS_MD_CUDAMixedBackend.cu
@@ -340,9 +360,15 @@ ELSE()
 	target_link_libraries(${lib_name} PRIVATE ${CMAKE_DL_LIBS})
 ENDIF()
 
-target_link_libraries(${exe_name} PRIVATE ${lib_name})
-target_link_libraries(DNAnalysis PRIVATE ${lib_name})
-target_link_libraries(confGenerator PRIVATE ${lib_name})
+add_library(tinyexpr extern/tinyexpr/tinyexpr.c)
+target_include_directories(tinyexpr PUBLIC extern/tinyexpr)
+
+if(ZSTD_ENABLED)
+	target_link_libraries(${lib_name} PRIVATE ${ZSTD_TARGET})
+endif()
+target_link_libraries(${exe_name} PRIVATE ${lib_name} tinyexpr)
+target_link_libraries(DNAnalysis PRIVATE ${lib_name} tinyexpr)
+target_link_libraries(confGenerator PRIVATE ${lib_name} tinyexpr)
 
 # we add these executable as dependencies for the test targets
 ADD_DEPENDENCIES(test_run ${exe_name} DNAnalysis confGenerator)

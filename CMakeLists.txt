@@ -22,9 +22,12 @@ OPTION(CUDA_DOUBLE "Set the numerical precision for the CUDA backend to double" 
 OPTION(CUDA_COMMON_ARCH "Set to OFF to autodetect the GPU and compile for its architecture, set to ON (default) to compile for the most common architectures" ON)
 OPTION(NATIVE_COMPILATION "Set to OFF to compile without the -march=native flag. This may be required when compiling binaries to be used elsewhere" ON)
 OPTION(JSON_ENABLED "Set to OFF to compile without JSON support, disabling the possibility of initialising external forces and/or observables from a JSON file. Disabling JSON can sometimes help with compiling with older compilers" ON)
+OPTION(LEGACY_CODE "Set to ON to compile legacy code, which comprises features and classes that are very rarely used" OFF)
+OPTION(ZSTD_ENABLED "Set to ON to enable zstd compression support" OFF)
 
 OPTION(Python "Enable Python bindings" OFF)
 OPTION(OxpySystemInstall "Install oxpy as a system-wide package" OFF)
+OPTION(OxpyVersionOverride "Skip the Python version check and use the default Python regardless of version" OFF)
 
 if(DEFINED PYTHON)
 	set(Python ${PYTHON})
@@ -78,6 +81,10 @@ ENDIF(SIGNAL)
 IF(NOT DOUBLE)
 	ADD_DEFINITIONS(-DFLOAT_PRECISION)
 ENDIF()
+
+if(CUDA_DOUBLE)
+	ADD_DEFINITIONS(-DCUDA_DOUBLE_PRECISION)
+endif()
 
 include_directories(src/extern)
 
@@ -220,8 +227,53 @@ else()
 	message(STATUS "Disabling JSON support")
 endif(JSON_ENABLED)
 
+# zstd can be optionally used for compressing output files, and it's a very common library, 
+# so we try to find it first, if the user enabled it. If it's not found, we fetch it via 
+# FetchContent and build it as part of our build process.
+if(ZSTD_ENABLED)
+	find_package(zstd CONFIG QUIET)
+	if(NOT zstd_FOUND)
+		message(STATUS "Zstd not found: fetching zstd via FetchContent")
+		include(FetchContent)
+
+		FetchContent_Declare(
+			zstd
+			GIT_REPOSITORY https://github.com/facebook/zstd.git
+			GIT_TAG v1.5.6
+		)
+
+		FetchContent_GetProperties(zstd)
+		if(NOT zstd_POPULATED)
+			FetchContent_Populate(zstd)
+
+			# zstd build options
+			set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+			set(ZSTD_BUILD_STATIC ON  CACHE BOOL "" FORCE)
+			set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+
+			# IMPORTANT: add zstd CMake subdirectory with actual libs
+			add_subdirectory(${zstd_SOURCE_DIR}/build/cmake ${zstd_BINARY_DIR})
+		endif()
+
+		set(ZSTD_TARGET libzstd_static)
+	else()
+		set(ZSTD_TARGET zstd::libzstd_shared)
+	endif()
+
+	message(STATUS "Zstd support enabled")
+	add_definitions(-DZSTD_ENABLED)
+else()
+	message(STATUS "Zstd support disabled")
+endif()
+
 # get the current git revision, if git is installed. Avoid warnings if it isn't
 FIND_PACKAGE(Git)
+set(OXPY_FALLBACK_VERSION "0.0.0")
+file(STRINGS "${PROJECT_SOURCE_DIR}/pyproject.toml" OXPY_FALLBACK_VERSION_LINE REGEX "^fallback_version = \".+\"$")
+if(OXPY_FALLBACK_VERSION_LINE)
+	string(REGEX REPLACE "^fallback_version = \"([^\"]+)\"$" "\\1" OXPY_FALLBACK_VERSION "${OXPY_FALLBACK_VERSION_LINE}")
+endif()
+
 IF(Git_FOUND)
 	EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} rev-parse --git-dir WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} OUTPUT_VARIABLE git_dir OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 	IF(git_dir MATCHES ".git$")
@@ -235,7 +287,18 @@ ENDIF(Git_FOUND)
 
 IF(IS_GIT_REPO)
 	EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} OUTPUT_VARIABLE revision OUTPUT_STRIP_TRAILING_WHITESPACE)
-	EXECUTE_PROCESS(COMMAND ${GIT_EXECUTABLE} describe --tags --abbrev=0 HEAD WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} OUTPUT_VARIABLE tag OUTPUT_STRIP_TRAILING_WHITESPACE)
+	EXECUTE_PROCESS(
+		COMMAND ${GIT_EXECUTABLE} describe --tags --abbrev=0 HEAD
+		WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+		OUTPUT_VARIABLE tag
+		OUTPUT_STRIP_TRAILING_WHITESPACE
+		RESULT_VARIABLE git_describe_result
+		ERROR_QUIET
+	)
+	if(NOT git_describe_result EQUAL 0 OR tag STREQUAL "")
+		SET(tag "v${OXPY_FALLBACK_VERSION}")
+		message(STATUS "No git tag found for HEAD, falling back to oxpy version ${OXPY_FALLBACK_VERSION}")
+	endif()
 ELSE()
 	get_filename_component(dir_name ${PROJECT_SOURCE_DIR} NAME)
 	string(REGEX MATCH "-([0-9]+\\.[0-9]+\\.[0-9]+.*)$" version_match ${dir_name})
@@ -243,7 +306,7 @@ ELSE()
 	if(version_match)
 		SET(tag "v${CMAKE_MATCH_1}")
 	else()
-		SET(tag "unknown")
+		SET(tag "v${OXPY_FALLBACK_VERSION}")
 	endif()
 ENDIF(IS_GIT_REPO)
 
@@ -299,3 +362,4 @@ SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 ADD_SUBDIRECTORY(src)
 ADD_SUBDIRECTORY(contrib)
 ADD_SUBDIRECTORY(src/oxpy)
+ADD_SUBDIRECTORY(analysis)
